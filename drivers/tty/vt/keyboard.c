@@ -55,7 +55,7 @@
 
 #define KBD_DEFMODE (BIT(VC_REPEAT) | BIT(VC_META))
 
-#if defined(CONFIG_X86) || defined(CONFIG_PARISC)
+#if defined(CONFIG_X86) || defined(CONFIG_PARISC) || defined(CONFIG_M68K)
 #include <asm/kbdleds.h>
 #else
 static inline int kbd_defleds(void)

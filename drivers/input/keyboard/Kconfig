@@ -446,6 +446,17 @@ config KEYBOARD_IMX_SC_KEY
 	  To compile this driver as a module, choose M here: the
 	  module will be called imx_sc_key.
 
+config KEYBOARD_NEXT
+	tristate "NeXT keyboard and mouse"
+	depends on NEXT || COMPILE_TEST
+	help
+	  Say Y here if you are running Linux on a NeXT computer and want
+	  to use its keyboard and mouse.  The mouse appears as a separate
+	  input device.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called nextkbd.
+
 config KEYBOARD_NEWTON
 	tristate "Newton keyboard"
 	select SERIO
