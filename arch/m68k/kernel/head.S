@@ -1097,7 +1097,7 @@ L(nothp300):
 	 * Map the internal device space (physical 0x02xxxxxx, including the
 	 * BMAP alias and the Turbo memory controller) to NEXT_IO_VADDR.
 	 */
-	is_040(1f)
+	is_040_or_060(1f)
 
 	mmu_map	#NEXT_IO_VADDR,#NEXT_IO_PADDR,#NEXT_IO_SIZE,#_PAGE_NOCACHE030
 

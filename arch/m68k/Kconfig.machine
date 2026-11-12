@@ -152,7 +152,9 @@ config NEXT
 	  This option enables support for the 68030 and 68040 based NeXT
 	  computers: the NeXT Computer, NeXTcube, NeXTstation, NeXTstation
 	  Color and their Turbo variants.  These machines need a Linux boot
-	  loader that is started by the NeXT ROM monitor.
+	  loader that is started by the NeXT ROM monitor.  With M68060, it
+	  also runs on a 68060 in place of the 68040, which NeXT never sold
+	  but the Previous emulator can be patched to provide.
 
 	  Supported: the interrupt controller, system timer, real-time
 	  clock, power-off and reboot, the serial ports (SERIAL_PMACZILOG),

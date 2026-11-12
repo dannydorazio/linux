@@ -128,7 +128,7 @@
 
 /* Devices that sit behind the BMAP on the '040 machines */
 #define NEXT_BMAP_IO(offset)	NEXT_IO((offset) + \
-					(CPU_IS_040 ? NEXT_BMAP_OFFSET : 0))
+					(CPU_IS_040_OR_060 ? NEXT_BMAP_OFFSET : 0))
 
 /*
  * Interrupt sources, numbered by their bit in the interrupt status and

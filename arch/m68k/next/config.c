@@ -267,7 +267,7 @@ static void __init next_scc_setup(void)
 {
 	resource_size_t base = NEXT_IO_PADDR + NEXT_SCC_OFFSET;
 
-	if (CPU_IS_040)
+	if (CPU_IS_040_OR_060)
 		base += NEXT_BMAP_OFFSET;
 
 	scc_a_rsrcs[0].start = scc_a_rsrcs[0].end = base + NEXT_SCC_CTRL_A;
@@ -411,7 +411,7 @@ static void __init next_slots_init(void)
 
 static int __init next_platform_init(void)
 {
-	resource_size_t bmap = CPU_IS_040 ? NEXT_BMAP_OFFSET : 0;
+	resource_size_t bmap = CPU_IS_040_OR_060 ? NEXT_BMAP_OFFSET : 0;
 
 	if (!MACH_IS_NEXT)
 		return -ENODEV;
@@ -484,7 +484,7 @@ static void next_reset(void)
 
 	local_irq_disable();
 
-	if (CPU_IS_040) {
+	if (CPU_IS_040_OR_060) {
 		/* 16 MB at phys, any function code, cache inhibited */
 		unsigned long ttr = (phys & 0xff000000) | 0xc040;
 
