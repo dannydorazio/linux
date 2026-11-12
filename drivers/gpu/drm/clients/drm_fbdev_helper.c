@@ -117,6 +117,20 @@ __drm_fb_helper_restore_fbdev_mode_unlocked(struct drm_fb_helper *fb_helper,
 	if (do_delayed)
 		drm_fb_helper_hotplug_event(fb_helper);
 
+	/*
+	 * The commit doesn't restore the palette: whoever had the device
+	 * may have left theirs in the gamma LUT.
+	 */
+	if (!ret && fb_helper->info &&
+	    fb_helper->info->fix.visual == FB_VISUAL_PSEUDOCOLOR) {
+		struct fb_info *info = fb_helper->info;
+		struct fb_cmap cmap = info->cmap;
+
+		/* info->cmap has room for 256 colours */
+		cmap.len = min(cmap.len, 1U << info->var.bits_per_pixel);
+		fb_set_cmap(&cmap, info);
+	}
+
 	if (fb_helper->funcs->fb_restore)
 		fb_helper->funcs->fb_restore(fb_helper);
 
