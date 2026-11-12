@@ -65,6 +65,80 @@ static bool next_is_color(void)
 	       next_bi_data.model == NEXT_MODEL_TURBO_COLOR;
 }
 
+/*
+ * NeXTBus boards, in a cube's slots 2, 4 and 6.  The NBIC of a board shows
+ * its ID in the last bytes of the slot's 16 MB of slot space, one byte to a
+ * word; an empty slot bus errors.  A board's own 256 MB of board space
+ * starts at the slot number times 256 MB.
+ */
+#define NEXT_SLOT_PADDR(slot)		(0xf0000000 | (slot) << 24)
+#define NEXT_BOARD_PADDR(slot)		((resource_size_t)(slot) << 28)
+#define NEXT_NBIC_ID_OFFSET		0x00fffff0
+#define NEXT_NBIC_ID_DIMENSION		0xc0000001
+
+/* NeXTdimension: where its parts are, in its board and slot space */
+#define NEXT_ND_VRAM_OFFSET		0x0e000000
+#define NEXT_ND_VRAM_SIZE		0x00400000
+#define NEXT_ND_MC_OFFSET		0x00800000
+#define NEXT_ND_MC_SIZE			0x00004000
+#define NEXT_ND_DAC_OFFSET		0x00200000
+#define NEXT_ND_DAC_SIZE		0x00000010
+#define NEXT_ND_DRAM_OFFSET		0x08000000
+#define NEXT_ND_DRAM_SIZE		0x00020000	/* what the driver uses */
+#define NEXT_ND_DRAM_BANKS		4
+#define NEXT_ND_DRAM_BANK_SIZE		0x01000000	/* the most a bank holds */
+#define NEXT_ND_DRAM_STEP		0x00400000	/* the least */
+#define NEXT_ND_DRAM_PROBE		0x00100000	/* clear of the driver's */
+
+/* What's in slots 2, 4 and 6, for /proc/hardware */
+static struct {
+	u32 id;
+	/* a NeXTdimension's */
+	unsigned int dram_mb;	/* sized at boot */
+	u32 epsr;		/* from its driver, once the i860 runs */
+} next_slots[3];
+
+/*
+ * The NeXTdimension driver passes on the i860's extended processor status
+ * register, which its program reads: the processor type in bits 7-0 (1 is
+ * the i860XR, 2 the i860XP) and the stepping in bits 12-8.
+ */
+#define NEXT_EPSR_TYPE(epsr)		((epsr) & 0xff)
+#define NEXT_EPSR_STEPPING(epsr)	(((epsr) >> 8) & 0x1f)
+
+void next_nd_set_epsr(unsigned int slot, u32 epsr)
+{
+	if (slot >= 2 && slot <= 6 && !(slot & 1))
+		WRITE_ONCE(next_slots[slot / 2 - 1].epsr, epsr);
+}
+EXPORT_SYMBOL_GPL(next_nd_set_epsr);
+
+static void next_nd_show(struct seq_file *m, unsigned int slot)
+{
+	u32 epsr = READ_ONCE(next_slots[slot / 2 - 1].epsr);
+
+	seq_printf(m, "Slot %u:\tNeXTdimension: i860", slot);
+	switch (NEXT_EPSR_TYPE(epsr)) {
+	case 0:		/* the driver hasn't run the i860 */
+		break;
+	case 1:
+		seq_printf(m, "XR stepping %u", NEXT_EPSR_STEPPING(epsr));
+		break;
+	case 2:
+		seq_printf(m, "XP stepping %u", NEXT_EPSR_STEPPING(epsr));
+		break;
+	default:
+		seq_printf(m, " type %u stepping %u", NEXT_EPSR_TYPE(epsr),
+			   NEXT_EPSR_STEPPING(epsr));
+	}
+	/*
+	 * The clock, the video memory and the display are the same on every
+	 * board: nominal, not detected.
+	 */
+	seq_printf(m, " at 33 MHz, %u MB memory, %u MB video memory, 1120x832 32-bit color display\n",
+		   next_slots[slot / 2 - 1].dram_mb, NEXT_ND_VRAM_SIZE >> 20);
+}
+
 /* The rest of /proc/hardware, after the model and memory size */
 static void next_get_hardware_list(struct seq_file *m)
 {
@@ -78,6 +152,13 @@ static void next_get_hardware_list(struct seq_file *m)
 			   m68k_memory[i].size >> 20, m68k_memory[i].addr);
 	seq_printf(m, "Display:\t1120x832, %s\n",
 		   next_is_color() ? "12-bit color" : "2-bit grayscale");
+	for (i = 0; i < ARRAY_SIZE(next_slots); i++) {
+		if (next_slots[i].id == NEXT_NBIC_ID_DIMENSION)
+			next_nd_show(m, 2 * i + 2);
+		else if (next_slots[i].id)
+			seq_printf(m, "Slot %d:\tboard %08x\n", 2 * i + 2,
+				   next_slots[i].id);
+	}
 	seq_printf(m, "Ethernet:\t%pM\n", next_bi_data.ether_addr);
 
 	seq_puts(m, "On board:\n");
@@ -221,27 +302,6 @@ static struct resource next_kbd_rsrcs[] = {
 	DEFINE_RES_IRQ(NEXT_IRQ_KYBD_MOUSE),
 };
 
-/*
- * NeXTBus boards, in a cube's slots 2, 4 and 6.  The NBIC of a board shows
- * its ID in the last bytes of the slot's 16 MB of slot space, one byte to a
- * word; an empty slot bus errors.  A board's own 256 MB of board space
- * starts at the slot number times 256 MB.
- */
-#define NEXT_SLOT_PADDR(slot)		(0xf0000000 | (slot) << 24)
-#define NEXT_BOARD_PADDR(slot)		((resource_size_t)(slot) << 28)
-#define NEXT_NBIC_ID_OFFSET		0x00fffff0
-#define NEXT_NBIC_ID_DIMENSION		0xc0000001
-
-/* NeXTdimension: where its parts are, in its board and slot space */
-#define NEXT_ND_VRAM_OFFSET		0x0e000000
-#define NEXT_ND_VRAM_SIZE		0x00400000
-#define NEXT_ND_MC_OFFSET		0x00800000
-#define NEXT_ND_MC_SIZE			0x00004000
-#define NEXT_ND_DAC_OFFSET		0x00200000
-#define NEXT_ND_DAC_SIZE		0x00000010
-#define NEXT_ND_DRAM_OFFSET		0x08000000
-#define NEXT_ND_DRAM_SIZE		0x00020000	/* what the driver uses */
-
 static bool next_has_slots(void)
 {
 	return next_bi_data.model == NEXT_MODEL_CUBE ||
@@ -265,6 +325,51 @@ static u32 __init next_nbic_id(unsigned int slot)
 	return id;
 }
 
+/*
+ * A NeXTdimension bank of DRAM holds 4 or 16 MB, or nothing, in 16 MB of
+ * the board's space; a smaller bank repeats through it.  Write a mark at
+ * each 4 MB, the first one last, and count those that are still there.
+ * The board's ROM may be using the memory, so put it back afterwards.
+ */
+static unsigned int __init next_nd_bank_mb(resource_size_t bank)
+{
+	enum { STEPS = NEXT_ND_DRAM_BANK_SIZE / NEXT_ND_DRAM_STEP };
+	void __iomem *mark[STEPS] = {};
+	u16 saved[STEPS];
+	unsigned int i, n = 0;
+
+	for (i = 0; i < STEPS; i++) {
+		mark[i] = ioremap(bank + i * NEXT_ND_DRAM_STEP +
+				  NEXT_ND_DRAM_PROBE, 2);
+		if (!mark[i] || !hwreg_present(mark[i]))
+			goto out;
+		saved[i] = __raw_readw(mark[i]);
+	}
+	for (i = STEPS; i-- > 0; )
+		__raw_writew(0x4e00 | i, mark[i]);
+	for (i = 0; i < STEPS; i++)
+		if (__raw_readw(mark[i]) == (0x4e00 | i))
+			n++;
+	for (i = STEPS; i-- > 0; )
+		__raw_writew(saved[i], mark[i]);
+out:
+	for (i = 0; i < STEPS; i++)
+		if (mark[i])
+			iounmap(mark[i]);
+	return n * (NEXT_ND_DRAM_STEP >> 20);
+}
+
+static unsigned int __init next_nd_dram_mb(unsigned int slot)
+{
+	unsigned int bank, mb = 0;
+
+	for (bank = 0; bank < NEXT_ND_DRAM_BANKS; bank++)
+		mb += next_nd_bank_mb(NEXT_BOARD_PADDR(slot) +
+				      NEXT_ND_DRAM_OFFSET +
+				      bank * NEXT_ND_DRAM_BANK_SIZE);
+	return mb;
+}
+
 static void __init next_slots_init(void)
 {
 	unsigned int slot;
@@ -275,6 +380,7 @@ static void __init next_slots_init(void)
 	for (slot = 2; slot <= 6; slot += 2) {
 		u32 id = next_nbic_id(slot);
 
+		next_slots[slot / 2 - 1].id = id;
 		if (id == NEXT_NBIC_ID_DIMENSION) {
 			struct resource rsrcs[] = {
 				DEFINE_RES_MEM(NEXT_BOARD_PADDR(slot) +
@@ -291,7 +397,11 @@ static void __init next_slots_init(void)
 					       NEXT_ND_DRAM_SIZE),
 			};
 
-			pr_info("NeXT: NeXTdimension in slot %u\n", slot);
+			unsigned int mb = next_nd_dram_mb(slot);
+
+			next_slots[slot / 2 - 1].dram_mb = mb;
+			pr_info("NeXT: NeXTdimension in slot %u, %u MB\n", slot,
+				mb);
 			platform_device_register_simple("next-dimension", slot,
 							rsrcs,
 							ARRAY_SIZE(rsrcs));

@@ -217,6 +217,7 @@ void next_rtc_init(void);
 const char *next_rtc_chip(void);
 int next_hwclk(int op, struct rtc_time *t);
 void next_poweroff(void);
+void next_nd_set_epsr(unsigned int slot, u32 epsr);
 
 #endif /* __ASSEMBLER__ */
 
