@@ -22,6 +22,13 @@
  * copy on the board rather than redrawing the screen over the NeXTBus.  If
  * the program doesn't start, fbdev emulation keeps its framebuffer in
  * system memory like any other client, in big-endian XRGB8888.
+ *
+ * X's driver (xorg-nextdimension in the next68k-linux tree) draws with the
+ * i860 too, through the same ring.  It maps the board's DRAM as the fbdev
+ * MMIO region and keeps its framebuffer and pixmaps in the part the shared
+ * area names (ARENA), which the i860 copies to the video memory.  X and the
+ * console take turns at the ring as the VT switches, each starting from
+ * HEAD as the other left it.
  */
 
 #include <linux/delay.h>
@@ -30,7 +37,9 @@
 #include <linux/iopoll.h>
 #include <linux/console.h>
 #include <linux/module.h>
+#include <linux/platform_data/nextdimension.h>
 #include <linux/platform_device.h>
+#include <linux/sizes.h>
 #include <linux/workqueue.h>
 
 #include <drm/clients/drm_client_setup.h>
@@ -81,8 +90,12 @@
 #define NEXTDIM_FW_HEAD		0x8004
 #define NEXTDIM_FW_TAIL		0x8008
 #define NEXTDIM_FW_EPSR		0x800c	/* the i860's, for /proc/hardware */
+#define NEXTDIM_FW_ARENA	0x8010	/* X's memory: DRAM offset, */
+#define NEXTDIM_FW_ARENA_SIZE	0x8014	/* and bytes */
 #define NEXTDIM_RING		0x10000
 #define NEXTDIM_RING_WORDS	0x4000
+#define NEXTDIM_DRAM_USED	0x20000	/* the program, shared area and ring */
+#define NEXTDIM_DRAM_KEEP	0x100000 /* the program's, with its tables: not X's */
 
 #define NEXTDIM_OP_FILL		1	/* dst w h color */
 #define NEXTDIM_OP_COPY		2	/* src dst w h */
@@ -111,6 +124,7 @@ struct nextdim {
 	void __iomem *dac;
 	void __iomem *dram;
 	phys_addr_t vram_phys;
+	struct resource *dram_res;	/* all of the board's DRAM space */
 
 	bool accel;		/* the i860 draws the console */
 	unsigned int head;	/* where the next command goes in the ring */
@@ -285,6 +299,8 @@ static void nextdim_sync(struct nextdim *nd)
 {
 	unsigned int last = ~0U, us = 0;
 
+	nd->head = nextdim_dram_read(nd, NEXTDIM_FW_HEAD);	/* X's, maybe */
+
 	while (nd->accel && nextdim_wait_tail(nd, &last, &us) != nd->head)
 		;
 }
@@ -298,6 +314,8 @@ static void nextdim_sync(struct nextdim *nd)
 static void __iomem *nextdim_ring_reserve(struct nextdim *nd, unsigned int len)
 {
 	unsigned int last = ~0U, us = 0, tail;
+
+	nd->head = nextdim_dram_read(nd, NEXTDIM_FW_HEAD);	/* X's, maybe */
 
 	while (nd->accel) {
 		tail = nextdim_wait_tail(nd, &last, &us);
@@ -326,6 +344,37 @@ static void nextdim_ring_commit(struct nextdim *nd, unsigned int len)
 {
 	nd->head += len;
 	nextdim_dram_write(nd, NEXTDIM_FW_HEAD, nd->head);
+}
+
+/*
+ * The most DRAM in one piece, for X: a bank holds its memory at the start
+ * of its 16 MB, so a piece goes on into the next bank only from a full one.
+ * Without the bank sizes, there's none.
+ */
+static void nextdim_set_arena(struct nextdim *nd,
+			      const struct nextdim_platform_data *pdata)
+{
+	u32 start = 0, end = 0, best = 0, best_size = 0;
+	unsigned int bank;
+
+	for (bank = 0; pdata && bank < NEXTDIM_DRAM_BANKS; bank++) {
+		u32 base = bank * NEXTDIM_DRAM_BANK_SIZE;
+		u32 top = base + pdata->bank_mb[bank] * SZ_1M;
+
+		if (top == base) {
+			start = end = 0;
+			continue;
+		}
+		if (end != base || !end)
+			start = bank ? base : NEXTDIM_DRAM_KEEP;
+		end = top;
+		if (end > start && end - start > best_size) {
+			best = start;
+			best_size = end - start;
+		}
+	}
+	nextdim_dram_write(nd, NEXTDIM_FW_ARENA, best);
+	nextdim_dram_write(nd, NEXTDIM_FW_ARENA_SIZE, best_size);
 }
 
 /*
@@ -604,6 +653,9 @@ static int nextdim_fbdev_probe(struct drm_fb_helper *fb_helper,
 	info->fix.smem_len = info->screen_size;
 	info->fix.line_length = NEXTDIM_PITCH;
 	info->fix.accel = FB_ACCEL_NONE;
+	/* for X: the program's shared area, its ring and the arena */
+	info->fix.mmio_start = nd->dram_res->start;
+	info->fix.mmio_len = resource_size(nd->dram_res);
 
 	nextdim_set_bitfields(&info->var);
 
@@ -947,15 +999,25 @@ static int nextdim_probe(struct platform_device *pdev)
 	if (IS_ERR(nd->dac))
 		return PTR_ERR(nd->dac);
 
-	nd->dram = devm_platform_ioremap_resource(pdev, 3);
-	if (IS_ERR(nd->dram))
-		return PTR_ERR(nd->dram);
+	nd->dram_res = platform_get_resource(pdev, IORESOURCE_MEM, 3);
+	if (!nd->dram_res || resource_size(nd->dram_res) < NEXTDIM_DRAM_USED)
+		return -EINVAL;
+	if (!devm_request_mem_region(&pdev->dev, nd->dram_res->start,
+				     resource_size(nd->dram_res),
+				     dev_name(&pdev->dev)))
+		return -EBUSY;
+	nd->dram = devm_ioremap(&pdev->dev, nd->dram_res->start,
+				NEXTDIM_DRAM_USED);
+	if (!nd->dram)
+		return -ENOMEM;
 
 	ret = nextdim_i860_start(nd);
 	if (ret)
 		drm_warn(dev, "the i860 didn't start (%d); drawing without it\n",
 			 ret);
 	nd->accel = !ret;
+	if (nd->accel)
+		nextdim_set_arena(nd, dev_get_platdata(&pdev->dev));
 #ifdef CONFIG_NEXT
 	if (nd->accel)
 		next_nd_set_epsr(pdev->id,
