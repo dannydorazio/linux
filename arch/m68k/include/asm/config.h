@@ -16,6 +16,7 @@ extern int hp300_parse_bootinfo(const struct bi_record *record);
 extern int mac_parse_bootinfo(const struct bi_record *record);
 extern int mvme147_parse_bootinfo(const struct bi_record *record);
 extern int mvme16x_parse_bootinfo(const struct bi_record *record);
+extern int next_parse_bootinfo(const struct bi_record *record);
 extern int q40_parse_bootinfo(const struct bi_record *record);
 extern int virt_parse_bootinfo(const struct bi_record *record);
 
@@ -27,6 +28,7 @@ extern void config_hp300(void);
 extern void config_mac(void);
 extern void config_mvme147(void);
 extern void config_mvme16x(void);
+extern void config_next(void);
 extern void config_q40(void);
 extern void config_sun3(void);
 extern void config_sun3x(void);

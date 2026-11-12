@@ -182,6 +182,8 @@ static void __init m68k_parse_bootinfo(const struct bi_record *record)
 				unknown = apollo_parse_bootinfo(record);
 			else if (MACH_IS_VIRT)
 				unknown = virt_parse_bootinfo(record);
+			else if (MACH_IS_NEXT)
+				unknown = next_parse_bootinfo(record);
 			else
 				unknown = 1;
 		}
@@ -321,6 +323,11 @@ void __init setup_arch(char **cmdline_p)
 #ifdef CONFIG_VIRT
 	case MACH_VIRT:
 		config_virt();
+		break;
+#endif
+#ifdef CONFIG_NEXT
+	case MACH_NEXT:
+		config_next();
 		break;
 #endif
 	default:

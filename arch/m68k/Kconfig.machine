@@ -144,6 +144,23 @@ config VIRT
 	  This options enable a pure virtual machine based on m68k,
 	  VIRTIO MMIO devices and GOLDFISH interfaces (TTY, RTC, PIC).
 
+config NEXT
+	bool "NeXT support"
+	depends on MMU
+	select GENERIC_CLOCKEVENTS
+	help
+	  This option enables support for the 68030 and 68040 based NeXT
+	  computers: the NeXT Computer, NeXTcube, NeXTstation, NeXTstation
+	  Color and their Turbo variants.  These machines need a Linux boot
+	  loader that is started by the NeXT ROM monitor.
+
+	  Supported: the interrupt controller, system timer, real-time
+	  clock, power-off and reboot, the serial ports (SERIAL_PMACZILOG),
+	  SCSI (SCSI_NEXT_ESP), ethernet (NEXT_MB8795), the display
+	  (DRM_NEXTDISPLAY), keyboard and mouse (KEYBOARD_NEXT) and the
+	  NeXTdimension board (DRM_NEXTDIMENSION).  Not yet: sound, the
+	  floppy drive and ADB keyboards.
+
 config PILOT
 	bool
 

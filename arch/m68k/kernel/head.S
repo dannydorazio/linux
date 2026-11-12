@@ -257,6 +257,7 @@
 #include <asm/bootinfo-atari.h>
 #include <asm/bootinfo-hp300.h>
 #include <asm/bootinfo-mac.h>
+#include <asm/bootinfo-next.h>
 #include <asm/bootinfo-q40.h>
 #include <asm/bootinfo-virt.h>
 #include <asm/bootinfo-vme.h>
@@ -266,6 +267,9 @@
 #include <asm/asm-offsets.h>
 #ifdef CONFIG_MAC
 #  include <asm/machw.h>
+#endif
+#ifdef CONFIG_NEXT
+#  include <asm/nexthw.h>
 #endif
 
 #ifdef CONFIG_EARLY_PRINTK
@@ -532,6 +536,7 @@ func_define	putn,1
 #define is_not_q40(lab) cmpl &MACH_Q40,%pc@(m68k_machtype); jne lab
 #define is_not_sun3x(lab) cmpl &MACH_SUN3X,%pc@(m68k_machtype); jne lab
 #define is_not_virt(lab) cmpl &MACH_VIRT,%pc@(m68k_machtype); jne lab
+#define is_not_next(lab) cmpl &MACH_NEXT,%pc@(m68k_machtype); jne lab
 
 #define hasnt_leds(lab) cmpl &MACH_HP300,%pc@(m68k_machtype); \
 			jeq 42f; \
@@ -577,6 +582,7 @@ ENTRY(_stext)
 	.long	MACH_MAC, MAC_BOOTI_VERSION
 	.long	MACH_Q40, Q40_BOOTI_VERSION
 	.long	MACH_HP300, HP300_BOOTI_VERSION
+	.long	MACH_NEXT, NEXT_BOOTI_VERSION
 	.long	0
 1:	jra	__start
 
@@ -868,6 +874,20 @@ L(gvtdone):
 L(nothp):
 #endif
 
+#ifdef CONFIG_NEXT
+	is_not_next(L(notnext))
+	/*
+	 * The '040 machines reach the SCC through the BMAP alias of the
+	 * device space, the '030 machines at its plain address.
+	 */
+	movel	#NEXT_IO_PADDR+NEXT_SCC_OFFSET,%d0
+	is_not_040_or_060(1f)
+	addl	#NEXT_BMAP_OFFSET,%d0
+1:	lea	%pc@(L(next_sccbase)),%a0
+	movel	%d0,%a0@
+L(notnext):
+#endif
+
 /*
  * Initialize serial port
  */
@@ -1069,6 +1089,27 @@ L(notq40):
 
 L(nothp300):
 #endif /* CONFIG_HP300 */
+
+#ifdef CONFIG_NEXT
+	is_not_next(L(mmu_init_not_next))
+
+	/*
+	 * Map the internal device space (physical 0x02xxxxxx, including the
+	 * BMAP alias and the Turbo memory controller) to NEXT_IO_VADDR.
+	 */
+	is_040(1f)
+
+	mmu_map	#NEXT_IO_VADDR,#NEXT_IO_PADDR,#NEXT_IO_SIZE,#_PAGE_NOCACHE030
+
+	jbra	L(mmu_init_done)
+
+1:
+	mmu_map	#NEXT_IO_VADDR,#NEXT_IO_PADDR,#NEXT_IO_SIZE,#_PAGE_NOCACHE_S
+
+	jbra	L(mmu_init_done)
+
+L(mmu_init_not_next):
+#endif /* CONFIG_NEXT */
 
 #ifdef CONFIG_MVME147
 
@@ -1437,6 +1478,13 @@ L(mmu_fixup_done):
 1:	movew	#0,0xf05f400e
 	movew	#0x64,0xf05f400e
 2:
+#endif
+
+#ifdef CONFIG_NEXT
+	is_not_next(1f)
+	/* fixup the SCC location before printing */
+	addl	#NEXT_IO_VADDR-NEXT_IO_PADDR,L(next_sccbase)
+1:
 #endif
 
 #ifdef CONFIG_SUN3X
@@ -2764,6 +2812,22 @@ L(scc_initable_mac):
 #endif
 #endif /* CONFIG_MAC */
 
+#ifdef CONFIG_NEXT
+/* Initialisation table for SCC channel A with 3.6864 MHz PCLK */
+L(scc_initable_next):
+	.byte	4,0x44		/* x16, 1 stopbit, no parity */
+	.byte	3,0xc0		/* receiver: 8 bpc */
+	.byte	5,0xe2		/* transmitter: 8 bpc, assert dtr/rts */
+	.byte	10,0		/* NRZ */
+	.byte	11,0x50		/* use baud rate generator */
+	.byte	12,10,13,0	/* 9600 baud */
+	.byte	14,3		/* Baud rate generator enable, from PCLK */
+	.byte	3,0xc1		/* enable receiver */
+	.byte	5,0xea		/* enable transmitter */
+	.byte	-1
+	.even
+#endif /* CONFIG_NEXT */
+
 #ifdef CONFIG_ATARI
 /* #define USE_PRINTER */
 /* #define USE_SCC_B */
@@ -2948,6 +3012,30 @@ func_start	serial_init,%d0/%d1/%a0/%a1
 L(serial_init_not_mac):
 #endif	/* CONFIG_MAC */
 
+#ifdef CONFIG_NEXT
+	is_not_next(L(serial_init_not_next))
+	movel	%pc@(L(next_sccbase)),%a0
+	/* Reset SCC register pointer */
+	moveb	%a0@(NEXT_SCC_CTRL_A),%d0
+	/* Reset channel A: write register pointer then register value */
+	moveb	#9,%a0@(NEXT_SCC_CTRL_A)
+	moveb	#0x80,%a0@(NEXT_SCC_CTRL_A)
+	/* Wait for 5 PCLK cycles, which is about 45 CPU cycles at 33 MHz */
+	movel	#35,%d0
+5:
+	subq	#1,%d0
+	jne	5b
+	lea	%pc@(L(scc_initable_next)),%a1
+5:	moveb	%a1@+,%d0
+	jmi	6f
+	moveb	%d0,%a0@(NEXT_SCC_CTRL_A)
+	moveb	%a1@+,%a0@(NEXT_SCC_CTRL_A)
+	jra	5b
+6:
+	jra	L(serial_init_done)
+L(serial_init_not_next):
+#endif	/* CONFIG_NEXT */
+
 #ifdef CONFIG_Q40
 	is_not_q40(2f)
 /* debug output goes into SRAM, so we don't do it unless requested
@@ -3037,6 +3125,16 @@ func_start	serial_putc,%d0/%d1/%a0/%a1
 	jra	L(serial_putc_done)
 5:
 #endif	/* CONFIG_MAC */
+
+#ifdef CONFIG_NEXT
+	is_not_next(5f)
+	movel	%pc@(L(next_sccbase)),%a1
+3:	btst	#2,%a1@(NEXT_SCC_CTRL_A)
+	jeq	3b
+	moveb	%d0,%a1@(NEXT_SCC_DATA_A)
+	jra	L(serial_putc_done)
+5:
+#endif	/* CONFIG_NEXT */
 
 #ifdef CONFIG_ATARI
 	is_not_atari(4f)
@@ -3849,6 +3947,11 @@ L(mac_rowbytes):
 L(mac_sccbase):
 	.long	0
 #endif /* CONFIG_MAC */
+
+#if defined(CONFIG_NEXT)
+L(next_sccbase):
+	.long	0
+#endif /* CONFIG_NEXT */
 
 #if defined (CONFIG_APOLLO)
 LSRB0        = 0x10412

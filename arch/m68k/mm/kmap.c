@@ -20,6 +20,9 @@
 #include <asm/page.h>
 #include <asm/io.h>
 #include <asm/tlbflush.h>
+#ifdef CONFIG_NEXT
+#include <asm/nexthw.h>
+#endif
 
 #undef DEBUG
 
@@ -185,6 +188,16 @@ void __iomem *__ioremap(unsigned long physaddr, unsigned long size, int cachefla
 			return (void __iomem *)physaddr;
 	}
 #endif
+#ifdef CONFIG_NEXT
+	if (MACH_IS_NEXT) {
+		/* the device space is mapped by head.S */
+		if (physaddr >= NEXT_IO_PADDR &&
+		    physaddr + size <= NEXT_IO_PADDR + NEXT_IO_SIZE &&
+		    cacheflag == IOMAP_NOCACHE_SER)
+			return (void __iomem *)(physaddr - NEXT_IO_PADDR +
+						NEXT_IO_VADDR);
+	}
+#endif
 #ifdef CONFIG_COLDFIRE
 	if (__cf_internalio(physaddr))
 		return (void __iomem *) physaddr;
@@ -306,6 +319,12 @@ void iounmap(void __iomem *addr)
 #endif
 #ifdef CONFIG_VIRT
 	if (MACH_IS_VIRT && (unsigned long)addr >= 0xff000000)
+		return;
+#endif
+#ifdef CONFIG_NEXT
+	if (MACH_IS_NEXT &&
+	    (unsigned long)addr >= NEXT_IO_VADDR &&
+	    (unsigned long)addr < NEXT_IO_VADDR + NEXT_IO_SIZE)
 		return;
 #endif
 #ifdef CONFIG_COLDFIRE
