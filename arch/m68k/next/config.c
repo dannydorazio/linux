@@ -8,6 +8,7 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/memblock.h>
+#include <linux/platform_data/nextdimension.h>
 #include <linux/platform_device.h>
 #include <linux/reboot.h>
 #include <linux/seq_file.h>
@@ -84,10 +85,7 @@ static bool next_is_color(void)
 #define NEXT_ND_DAC_OFFSET		0x00200000
 #define NEXT_ND_DAC_SIZE		0x00000010
 #define NEXT_ND_DRAM_OFFSET		0x08000000
-#define NEXT_ND_DRAM_SIZE		0x00020000	/* what the driver uses */
-#define NEXT_ND_DRAM_BANKS		4
-#define NEXT_ND_DRAM_BANK_SIZE		0x01000000	/* the most a bank holds */
-#define NEXT_ND_DRAM_STEP		0x00400000	/* the least */
+#define NEXT_ND_DRAM_STEP		0x00400000	/* the least a bank holds */
 #define NEXT_ND_DRAM_PROBE		0x00100000	/* clear of the driver's */
 
 /* What's in slots 2, 4 and 6, for /proc/hardware */
@@ -333,7 +331,7 @@ static u32 __init next_nbic_id(unsigned int slot)
  */
 static unsigned int __init next_nd_bank_mb(resource_size_t bank)
 {
-	enum { STEPS = NEXT_ND_DRAM_BANK_SIZE / NEXT_ND_DRAM_STEP };
+	enum { STEPS = NEXTDIM_DRAM_BANK_SIZE / NEXT_ND_DRAM_STEP };
 	void __iomem *mark[STEPS] = {};
 	u16 saved[STEPS];
 	unsigned int i, n = 0;
@@ -357,17 +355,6 @@ out:
 		if (mark[i])
 			iounmap(mark[i]);
 	return n * (NEXT_ND_DRAM_STEP >> 20);
-}
-
-static unsigned int __init next_nd_dram_mb(unsigned int slot)
-{
-	unsigned int bank, mb = 0;
-
-	for (bank = 0; bank < NEXT_ND_DRAM_BANKS; bank++)
-		mb += next_nd_bank_mb(NEXT_BOARD_PADDR(slot) +
-				      NEXT_ND_DRAM_OFFSET +
-				      bank * NEXT_ND_DRAM_BANK_SIZE);
-	return mb;
 }
 
 static void __init next_slots_init(void)
@@ -394,17 +381,28 @@ static void __init next_slots_init(void)
 					       NEXT_ND_DAC_SIZE),
 				DEFINE_RES_MEM(NEXT_BOARD_PADDR(slot) +
 					       NEXT_ND_DRAM_OFFSET,
-					       NEXT_ND_DRAM_SIZE),
+					       NEXTDIM_DRAM_BANKS *
+					       NEXTDIM_DRAM_BANK_SIZE),
 			};
+			struct nextdim_platform_data pdata;
+			unsigned int bank, mb = 0;
 
-			unsigned int mb = next_nd_dram_mb(slot);
-
+			for (bank = 0; bank < NEXTDIM_DRAM_BANKS; bank++) {
+				pdata.bank_mb[bank] = next_nd_bank_mb(
+					NEXT_BOARD_PADDR(slot) +
+					NEXT_ND_DRAM_OFFSET +
+					bank * NEXTDIM_DRAM_BANK_SIZE);
+				mb += pdata.bank_mb[bank];
+			}
 			next_slots[slot / 2 - 1].dram_mb = mb;
 			pr_info("NeXT: NeXTdimension in slot %u, %u MB\n", slot,
 				mb);
-			platform_device_register_simple("next-dimension", slot,
-							rsrcs,
-							ARRAY_SIZE(rsrcs));
+			platform_device_register_resndata(NULL,
+							  "next-dimension",
+							  slot, rsrcs,
+							  ARRAY_SIZE(rsrcs),
+							  &pdata,
+							  sizeof(pdata));
 		} else if (id) {
 			pr_info("NeXT: board %08x in slot %u\n", id, slot);
 		}
