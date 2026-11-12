@@ -592,8 +592,12 @@ static int nextdim_fbdev_probe(struct drm_fb_helper *fb_helper,
 
 	drm_fb_helper_fill_info(info, fb_helper, sizes);
 	info->fbops = &nextdim_fb_ops;
-	info->flags |= FBINFO_HWACCEL_COPYAREA | FBINFO_HWACCEL_FILLRECT |
-		       FBINFO_HWACCEL_IMAGEBLIT;
+	/*
+	 * Not FBINFO_HWACCEL_IMAGEBLIT, though the i860 draws the glyphs
+	 * too: with it fbcon scrolls by redrawing every changed character
+	 * with the CPU, rather than with a copy on the board.
+	 */
+	info->flags |= FBINFO_HWACCEL_COPYAREA | FBINFO_HWACCEL_FILLRECT;
 	info->screen_base = nd->vram;
 	info->screen_size = NEXTDIM_PITCH * NEXTDIM_HEIGHT;
 	info->fix.smem_start = nd->vram_phys;
