@@ -734,12 +734,12 @@ config SERIAL_MCF_CONSOLE
 	  Enable a ColdFire internal serial port to be the system console.
 
 config SERIAL_PMACZILOG
-	tristate "Mac or PowerMac z85c30 ESCC support"
-	depends on (M68K && MAC) || PPC_PMAC
+	tristate "Mac, PowerMac or NeXT z85c30 ESCC support"
+	depends on (M68K && (MAC || NEXT)) || PPC_PMAC
 	select SERIAL_CORE
 	help
 	  This driver supports the Zilog z85C30 serial ports found on
-	  (Power)Mac machines.
+	  (Power)Mac and NeXT machines.
 	  Say Y or M if you want to be able to these serial ports.
 
 config SERIAL_PMACZILOG_TTYS

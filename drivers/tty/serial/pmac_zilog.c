@@ -1619,7 +1619,7 @@ extern struct platform_device scc_a_pdev, scc_b_pdev;
 
 static int __init pmz_init_port(struct uart_pmac_port *uap)
 {
-	struct resource *r_ports;
+	struct resource *r_ports, *r_data;
 	int irq;
 
 	r_ports = platform_get_resource(uap->pdev, IORESOURCE_MEM, 0);
@@ -1630,8 +1630,24 @@ static int __init pmz_init_port(struct uart_pmac_port *uap)
 	if (irq < 0)
 		return irq;
 
+	/*
+	 * Platforms may give the data register as a second resource (NeXT);
+	 * otherwise it is 4 bytes above the control register and the
+	 * registers are mapped 1:1 (Macintosh).
+	 */
+	r_data = platform_get_resource(uap->pdev, IORESOURCE_MEM, 1);
+	if (r_data) {
+		uap->port.membase = ioremap(r_ports->start, 1);
+		uap->data_reg = ioremap(r_data->start, 1);
+		if (!uap->port.membase || !uap->data_reg)
+			return -ENOMEM;
+	} else {
+		uap->port.membase = (unsigned char __iomem *)r_ports->start;
+		uap->data_reg = uap->port.membase + 4;
+	}
+
 	uap->port.mapbase  = r_ports->start;
-	uap->port.membase  = (unsigned char __iomem *) r_ports->start;
+	uap->control_reg   = uap->port.membase;
 	uap->port.iotype   = UPIO_MEM;
 	uap->port.irq      = irq;
 	uap->port.uartclk  = ZS_CLOCK;
@@ -1640,8 +1656,6 @@ static int __init pmz_init_port(struct uart_pmac_port *uap)
 	uap->port.type     = PORT_PMAC_ZILOG;
 	uap->port.flags    = 0;
 
-	uap->control_reg   = uap->port.membase;
-	uap->data_reg      = uap->control_reg + 4;
 	uap->port_type     = 0;
 	uap->port.has_sysrq = IS_ENABLED(CONFIG_SERIAL_PMACZILOG_CONSOLE);
 
