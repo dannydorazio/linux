@@ -27,6 +27,7 @@
 #include <linux/delay.h>
 #include <linux/fb.h>
 #include <linux/io.h>
+#include <linux/iopoll.h>
 #include <linux/console.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -62,6 +63,8 @@
 /* Memory controller registers */
 #define NEXTDIM_MC_CSR0		0x0000
 #define  NEXTDIM_CSR0_RESET	0x00000001	/* restart the i860 */
+#define  NEXTDIM_CSR0_CS8	0x00000002	/* the i860 boots from its 8-bit ROM */
+#define  NEXTDIM_CSR0_IMASK	0x00000004	/* the i860 takes interrupts */
 #define  NEXTDIM_CSR0_INT860	0x00000008	/* interrupt the i860 */
 #define NEXTDIM_MC_VRAM_TIMING	0x2000
 #define  NEXTDIM_VRAM_UNBLANK	0x00000001
@@ -195,13 +198,28 @@ static void nextdim_dram_write(struct nextdim *nd, unsigned int offset, u32 val)
 	__raw_writel(val, nd->dram + offset);
 }
 
-/* Restart the i860 into its ROM, which then runs the program. */
+/*
+ * Restart the i860 into its ROM, which then runs the program.  After a
+ * restart the ROM tests the start of DRAM and sets CSR0 up, the i860's
+ * interrupt enable last, then waits to be interrupted: the program can only
+ * be loaded, and the i860 interrupted, after that.  An interrupt sent
+ * earlier is lost when the ROM writes CSR0.  (Found by experiment in
+ * Previous, which runs the board's ROM.)
+ */
 static int nextdim_i860_start(struct nextdim *nd)
 {
 	unsigned int i;
-	u32 csr0;
+	u32 csr0, ready;
+	int ret;
 
-	__raw_writel(NEXTDIM_CSR0_RESET, nd->mc + NEXTDIM_MC_CSR0);
+	/* CS8 as at power-on: the ROM is 8 bits wide */
+	__raw_writel(NEXTDIM_CSR0_CS8 | NEXTDIM_CSR0_RESET,
+		     nd->mc + NEXTDIM_MC_CSR0);
+	ret = readx_poll_timeout(__raw_readl, nd->mc + NEXTDIM_MC_CSR0, csr0,
+				 csr0 & NEXTDIM_CSR0_IMASK, 1000,
+				 NEXTDIM_TIMEOUT_US);
+	if (ret)
+		return ret;
 
 	/* the i860 fetches instructions little-endian, a doubleword at once */
 	for (i = 0; i < ARRAY_SIZE(nextdim_fw); i++)
@@ -210,19 +228,16 @@ static int nextdim_i860_start(struct nextdim *nd)
 	nextdim_dram_write(nd, NEXTDIM_FW_HEAD, 0);
 	nd->head = 0;
 
-	/* the ROM waits for this, then jumps to the start of DRAM */
+	/* the ROM then jumps to the start of DRAM */
 	csr0 = __raw_readl(nd->mc + NEXTDIM_MC_CSR0);
 	__raw_writel(csr0 | NEXTDIM_CSR0_INT860, nd->mc + NEXTDIM_MC_CSR0);
-	for (i = 0; i < NEXTDIM_TIMEOUT_US / 1000; i++) {
-		if (nextdim_dram_read(nd, NEXTDIM_FW_READY) == NEXTDIM_FW_MAGIC)
-			break;
-		usleep_range(1000, 2000);
-	}
+	ret = readx_poll_timeout(__raw_readl, nd->dram + NEXTDIM_FW_READY, ready,
+				 ready == NEXTDIM_FW_MAGIC, 1000,
+				 NEXTDIM_TIMEOUT_US);
+	csr0 = __raw_readl(nd->mc + NEXTDIM_MC_CSR0);
 	__raw_writel(csr0 & ~NEXTDIM_CSR0_INT860, nd->mc + NEXTDIM_MC_CSR0);
 
-	if (nextdim_dram_read(nd, NEXTDIM_FW_READY) != NEXTDIM_FW_MAGIC)
-		return -ETIMEDOUT;
-	return 0;
+	return ret;
 }
 
 /*
@@ -240,7 +255,8 @@ static void nextdim_i860_dead(struct nextdim *nd)
 		nextdim_dram_read(nd, cmd + 4), nextdim_dram_read(nd, cmd + 8),
 		nextdim_dram_read(nd, cmd + 12), nextdim_dram_read(nd, cmd + 16),
 		nextdim_dram_read(nd, cmd + 20));
-	__raw_writel(NEXTDIM_CSR0_RESET, nd->mc + NEXTDIM_MC_CSR0);
+	__raw_writel(NEXTDIM_CSR0_CS8 | NEXTDIM_CSR0_RESET,
+		     nd->mc + NEXTDIM_MC_CSR0);
 	nd->accel = false;
 }
 
