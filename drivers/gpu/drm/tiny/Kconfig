@@ -82,6 +82,21 @@ config DRM_PANEL_MIPI_DBI
 	  https://github.com/notro/panel-mipi-dbi/wiki.
 	  To compile this driver as a module, choose M here.
 
+config DRM_NEXTDISPLAY
+	tristate "DRM support for the NeXT display"
+	depends on DRM && MMU
+	depends on NEXT || COMPILE_TEST
+	select DRM_CLIENT_SELECTION
+	select DRM_GEM_SHMEM_HELPER
+	select DRM_KMS_HELPER
+	help
+	  DRM driver for the built-in 1120x832 display of the NeXTcube and
+	  NeXTstation: four grey levels on the monochrome machines, 4096
+	  colours on the Color ones. It provides fbdev emulation, so it can
+	  also be the framebuffer console.
+
+	  If M is selected the module will be called nextdisplay.
+
 config DRM_PIXPAPER
         tristate "DRM support for PIXPAPER display panels"
         depends on DRM && SPI
