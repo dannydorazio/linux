@@ -136,20 +136,24 @@ static void nextdim_dac_write(struct nextdim *nd, unsigned int reg, u8 val)
 	writeb(val, nd->dac + NEXTDIM_DAC_REG);
 }
 
-/* As NeXT's driver sets it up, with a linear palette */
+/*
+ * 24-bit true color through a linear palette.  The register meanings are
+ * from Brooktree's Bt463 data sheet; tgafb sets the chip up the same way,
+ * except for the cursor, sync and blanking pedestal.
+ */
 static void nextdim_dac_init(struct nextdim *nd)
 {
 	unsigned int i;
 
-	nextdim_dac_write(nd, 0x201, 0x40);	/* 1:1 interleave */
-	nextdim_dac_write(nd, 0x202, 0x00);
-	nextdim_dac_write(nd, 0x203, 0x80);	/* sync, no pedestal */
+	nextdim_dac_write(nd, 0x201, 0x40);	/* 4:1 multiplexing */
+	nextdim_dac_write(nd, 0x202, 0x00);	/* 16 window types, no cursor */
+	nextdim_dac_write(nd, 0x203, 0x80);	/* sync on green, 0 IRE */
 	for (i = 0x205; i <= 0x208; i++)
 		nextdim_dac_write(nd, i, 0xff);	/* read mask: all planes */
 	for (i = 0x209; i <= 0x20c; i++)
 		nextdim_dac_write(nd, i, 0x00);	/* blink mask: none */
 
-	/* the window type table: 24-bit true color everywhere */
+	/* the window type table: 8 planes a channel, true color, everywhere */
 	for (i = 0x300; i <= 0x30f; i++) {
 		nextdim_dac_addr(nd, i);
 		writeb(0x00, nd->dac + NEXTDIM_DAC_REG);
