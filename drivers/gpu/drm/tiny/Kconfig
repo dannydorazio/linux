@@ -82,6 +82,22 @@ config DRM_PANEL_MIPI_DBI
 	  https://github.com/notro/panel-mipi-dbi/wiki.
 	  To compile this driver as a module, choose M here.
 
+config DRM_NEXTDIMENSION
+	tristate "DRM support for the NeXTdimension board"
+	depends on DRM && MMU
+	depends on NEXT || COMPILE_TEST
+	select DRM_CLIENT_SELECTION
+	select DRM_GEM_SHMEM_HELPER
+	select DRM_KMS_HELPER
+	select FB_IOMEM_HELPERS if DRM_FBDEV_EMULATION
+	help
+	  DRM driver for the 1120x832 32-bit color display of the
+	  NeXTdimension, a NeXTBus board for the NeXTcube. It provides fbdev
+	  emulation, so it can also be the framebuffer console, which the
+	  board's i860 then draws.
+
+	  If M is selected the module will be called nextdimension.
+
 config DRM_NEXTDISPLAY
 	tristate "DRM support for the NeXT display"
 	depends on DRM && MMU
