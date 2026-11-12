@@ -51,6 +51,10 @@
 #include <drm/drm_vblank.h>
 #include <drm/drm_vblank_helper.h>
 
+#ifdef CONFIG_NEXT
+#include <asm/nexthw.h>
+#endif
+
 #define NEXTDIM_WIDTH		1120
 #define NEXTDIM_HEIGHT		832
 #define NEXTDIM_PITCH		(1152 * 4)
@@ -73,6 +77,7 @@
 #define  NEXTDIM_FW_MAGIC	0x4e44464c	/* "NDFL" */
 #define NEXTDIM_FW_HEAD		0x8004
 #define NEXTDIM_FW_TAIL		0x8008
+#define NEXTDIM_FW_EPSR		0x800c	/* the i860's, for /proc/hardware */
 #define NEXTDIM_RING		0x10000
 #define NEXTDIM_RING_WORDS	0x4000
 
@@ -931,6 +936,11 @@ static int nextdim_probe(struct platform_device *pdev)
 		drm_warn(dev, "the i860 didn't start (%d); drawing without it\n",
 			 ret);
 	nd->accel = !ret;
+#ifdef CONFIG_NEXT
+	if (nd->accel)
+		next_nd_set_epsr(pdev->id,
+				 nextdim_dram_read(nd, NEXTDIM_FW_EPSR));
+#endif
 
 	/* after the ROM, which may have touched them */
 	nextdim_dac_init(nd);
