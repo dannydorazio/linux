@@ -2624,8 +2624,12 @@ static void fbcon_set_palette(struct vc_data *vc, const unsigned char *table)
 	 * If framebuffer is capable of less than 16 colors,
 	 * use default palette of fbcon.
 	 */
-	} else
+	} else {
+		/* only as many colours as there are, or fb_setcmap may refuse */
+		palette_cmap.len = 1 << depth;
+		palette_cmap.start = 0;
 		fb_copy_cmap(fb_default_cmap(1 << depth), &palette_cmap);
+	}
 
 	fb_set_cmap(&palette_cmap, info);
 }
