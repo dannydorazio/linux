@@ -87,6 +87,9 @@ static int (*const check_part[])(struct parsed_partitions *) = {
 #ifdef CONFIG_SYSV68_PARTITION
 	sysv68_partition,
 #endif
+#ifdef CONFIG_NEXT_PARTITION
+	next_partition,
+#endif
 	NULL
 };
 
