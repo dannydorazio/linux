@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# NeXT device configuration
+#
+
+config NET_VENDOR_NEXT
+	bool "NeXT devices"
+	default y
+	depends on NEXT
+	help
+	  If you have a network (Ethernet) card belonging to this class, say Y.
+
+	  Note that the answer to this question doesn't directly affect the
+	  kernel: saying N will just cause the configurator to skip all the
+	  questions about NeXT devices. If you say Y, you will be asked for
+	  your specific card in the following questions.
+
+if NET_VENDOR_NEXT
+
+config NEXT_MB8795
+	tristate "NeXT MB8795 ethernet support"
+	depends on NEXT
+	help
+	  This is the Fujitsu MB8795 ethernet controller built into the
+	  non-Turbo NeXT computers (NeXT Computer, NeXTcube, NeXTstation and
+	  NeXTstation Color), and its AT&T 7213 successor in the Turbo
+	  models.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called mb8795.
+
+endif # NET_VENDOR_NEXT
