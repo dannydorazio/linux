@@ -1395,6 +1395,18 @@ config MAC_SCSI
 	  SCSI-HOWTO, available from
 	  <http://www.tldp.org/docs.html#howto>.
 
+config SCSI_NEXT_ESP
+	tristate "NeXT NCR53C90A SCSI"
+	depends on NEXT && SCSI
+	select SCSI_SPI_ATTRS
+	select SCSI_ESP_PIO
+	help
+	  This is the NCR 53C90A SCSI controller built into the NeXT
+	  computers.  Transfers use programmed I/O for now.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called next_esp.
+
 config SCSI_MAC_ESP
 	tristate "Macintosh NCR53c9[46] SCSI"
 	depends on MAC && SCSI
